@@ -1,20 +1,30 @@
-/* CHARTROOM console. Renders three tubes off one websocket. */
+/* CHARTROOM console. Renders three tubes off the gap engine.
+ *
+ * The engine runs here, in the browser, in both modes. Offline it needs
+ * nothing but this folder — which is why the demo can live on a static host.
+ * When the Python proxy is up, the same engine calls the real Corti API
+ * through it.
+ */
+
+import { GapEngine, liveSource, offlineSource } from "./engine.js";
+import { RULEPACK } from "./rulepack.js";
 
 const $ = (s) => document.querySelector(s);
-const esc = (s) => s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+const esc = (s) => String(s).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
 const money = (n) => "$" + Math.round(n).toLocaleString("en-US");
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-let turns = [];
-let board = { codes: [], gaps: [], facts: [], atRisk: 0, captured: 0 };
+let script = null, engine = null, source = null;
+let turns = [], board = { codes: [], gaps: [], facts: [], atRisk: 0, captured: 0 };
 let selected = null;   // code whose evidence is lit in the transcript
 let heroId = null;     // gap held in the centre tube
-let log = [];
-let speed = 2, sound = false, started = null, ac = null;
+let log = [], speed = 2, sound = false, started = null, ac = null;
+let runId = 0, ticking = false, dirty = false, mic = null;
 
 /* ── boot ───────────────────────────────────────────────────────────── */
 const boot = $("#boot");
 const dismiss = () => {
-  if (boot.classList.contains("gone")) return;
+  if (!boot || boot.classList.contains("gone")) return;
   sound = true;                       // the click is the gesture browsers require
   boot.classList.add("gone");
   setTimeout(() => boot.remove(), 320);
@@ -35,38 +45,75 @@ function tone(freq, ms, type, at = 0, gain = 0.05) {
   o.start(ac.currentTime + at); o.stop(ac.currentTime + at + ms / 1000);
 }
 const alarm = () => { tone(233, 110, "square"); tone(175, 150, "square", 0.13); };
-const resolve = () => { tone(523, 90, "sine"); tone(784, 200, "sine", 0.09, 0.04); };
+const chime = () => { tone(523, 90, "sine"); tone(784, 200, "sine", 0.09, 0.04); };
 
-/* ── socket ─────────────────────────────────────────────────────────── */
-const ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws`);
-const send = (o) => ws.readyState === 1 && ws.send(JSON.stringify(o));
+/* ── the loop ───────────────────────────────────────────────────────── */
+const transcript = () => turns.map((t) => t.text).join(" ");
 
-ws.onmessage = ({ data }) => {
-  const m = JSON.parse(data);
-  if (m.type === "turn") { turns.push(m.turn); drawTurns(true); }
-  else if (m.type === "state") { board = m.state; m.events.forEach(event); draw(); }
-  else if (m.type === "started") { started = Date.now(); $("#onair").dataset.on = "1"; $("#mode").textContent = m.mode === "live" ? "microphone" : "recorded"; }
-  else if (m.type === "ended") { $("#onair").dataset.on = "0"; note("Consultation ended. Anything still red left the room undocumented."); }
-  else if (m.type === "reset") { turns = []; board = { codes: [], gaps: [], facts: [], atRisk: 0, captured: 0 }; selected = heroId = started = null; log = []; drawTurns(); draw(); }
-  else if (m.type === "error") { note(m.detail); }
-};
-ws.onclose = () => note("Console disconnected. Restart the server and reload.");
+async function addTurn(speaker, text, t = null) {
+  const prev = transcript();
+  turns.push({ speaker, text, t, at: prev.length + (prev ? 1 : 0) });
+  drawTurns(true);
+  await tick();
+}
+
+/** Coalesce: one analysis in flight, one queued behind it. */
+async function tick() {
+  if (ticking) { dirty = true; return; }
+  ticking = true;
+  try {
+    do {
+      dirty = false;
+      const { state, events } = await engine.tick(transcript());
+      board = state;
+      events.forEach(event);
+      draw();
+    } while (dirty);
+  } finally {
+    ticking = false;
+  }
+}
 
 function event(e) {
-  const g = e.gap;
   if (e.type === "gap_opened") {
+    const g = e.gap;
     alarm();
-    $("#gapTube").classList.remove("slip");
-    void $("#gapTube").offsetWidth;
-    $("#gapTube").classList.add("slip");
-    note(`<b>GAP ${g.code} ${g.gapType} ${g.label} ${money(g.dollars)}</b> ${g.ask}`);
-  } else if (e.type === "gap_closed") {
-    resolve();
+    const tube = $("#gapTube");
+    tube.classList.remove("slip"); void tube.offsetWidth; tube.classList.add("slip");
+    note(`<b>GAP ${g.code} ${g.gapType} ${g.label} ${money(g.dollars)}</b> ${esc(g.ask)}`);
+  } else {
+    chime();
     note(`<i>CLOSED ${e.code} ${e.label} — documented in the room</i>`);
     document.querySelectorAll(`.code[data-code="${e.code}"]`).forEach((n) => {
       n.classList.remove("flip"); void n.offsetWidth; n.classList.add("flip");
     });
   }
+}
+
+async function reset() {
+  runId++;
+  if (mic) { mic.stop(); mic = null; }
+  turns = []; log = []; selected = heroId = started = null;
+  board = { codes: [], gaps: [], facts: [], atRisk: 0, captured: 0 };
+  engine = new GapEngine(source);
+  $("#onair").dataset.on = "0";
+  drawTurns(); draw();
+}
+
+async function roll() {
+  await reset();
+  const run = ++runId;
+  started = Date.now();
+  $("#onair").dataset.on = "1";
+  let clock = 0;
+  for (const turn of script.turns) {
+    await sleep(Math.max(0, ((turn.t - clock) / speed) * 1000));
+    clock = turn.t;
+    if (run !== runId) return;
+    await addTurn(turn.speaker, turn.text, turn.t);
+  }
+  $("#onair").dataset.on = "0";
+  note("Consultation ended. Anything still red left the room undocumented.");
 }
 
 /* ── transcript tube ────────────────────────────────────────────────── */
@@ -85,7 +132,8 @@ function drawTurns(follow) {
       cursor = b;
     }
     html += esc(t.text.slice(cursor));
-    const stamp = t.t == null ? "··:··" : `${String(Math.floor(t.t / 60)).padStart(2, "0")}:${String(Math.floor(t.t % 60)).padStart(2, "0")}`;
+    const stamp = t.t == null ? "··:··"
+      : `${String(Math.floor(t.t / 60)).padStart(2, "0")}:${String(Math.floor(t.t % 60)).padStart(2, "0")}`;
     return `<div class="turn${follow && t === turns.at(-1) ? " fresh" : ""}" data-who="${t.speaker}">
       <span class="tc">${stamp}</span><span class="who">${t.speaker === "patient" ? "PT" : "DR"}</span>
       <span class="said">${html}</span></div>`;
@@ -124,9 +172,9 @@ function drawGap() {
       <span class="gap-basis">${esc(hero.basis)}</span>
     </div>
     ${rest.length ? `<div class="queue"><span>Also open</span>${rest.map((g) =>
-      `<button data-gap="${g.id}">${g.code} ${g.label}${g.dollars ? " · " + money(g.dollars) : ""}</button>`).join("")}</div>` : ""}
+      `<button data-gap="${g.id}">${g.code} ${esc(g.label)}${g.dollars ? " · " + money(g.dollars) : ""}</button>`).join("")}</div>` : ""}
   </div>`;
-  $("#sayIt").onclick = () => send({ cmd: "say", text: hero.closes });
+  $("#sayIt").onclick = () => { started = started || Date.now(); addTurn("clinician", hero.closes); };
   $("#gapBody").querySelectorAll("[data-gap]").forEach((b) =>
     (b.onclick = () => { heroId = b.dataset.gap; drawGap(); }));
 }
@@ -138,7 +186,8 @@ function drawCodes() {
   $("#codeCount").textContent = `${board.codes.length} code${board.codes.length === 1 ? "" : "s"}`;
   $("#codes").innerHTML = board.codes.map((c) => {
     const open = selected && selected.code === c.code;
-    return `<button class="code" data-code="${c.code}" data-status="${c.status}" aria-expanded="${!!open}" aria-label="${c.code}, ${LABEL[c.status]}${c.dollars ? ", " + money(c.dollars) : ""}. ${esc(c.display)}">
+    return `<button class="code" data-code="${c.code}" data-status="${c.status}" aria-expanded="${!!open}"
+      aria-label="${c.code}, ${LABEL[c.status]}${c.dollars ? ", " + money(c.dollars) : ""}. ${esc(c.display)}">
       <span class="main">
         <span class="hdr"><span class="id">${c.code}</span><span class="sys">${c.system === "cpt" ? "CPT" : "ICD-10"}</span></span>
         <span class="disp">${esc(c.display)}</span>
@@ -184,15 +233,15 @@ function tween(el, to) {
 }
 
 /* ── ticker ─────────────────────────────────────────────────────────── */
-function note(html) {
-  log.unshift(`${clock()} ${html}`);
-  $("#ticker").innerHTML = log.slice(0, 8).join(" &nbsp;·&nbsp; ") + " &nbsp;·&nbsp; ";
-}
 const clock = () => {
   if (!started) return "00:00";
   const s = Math.floor((Date.now() - started) / 1000);
   return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
 };
+function note(html) {
+  log.unshift(`${clock()} ${html}`);
+  $("#ticker").innerHTML = log.slice(0, 8).join(" &nbsp;·&nbsp; ") + " &nbsp;·&nbsp; ";
+}
 setInterval(() => ($("#clock").textContent = clock()), 1000);
 
 function draw() {
@@ -202,26 +251,49 @@ function draw() {
 }
 
 /* ── transport ──────────────────────────────────────────────────────── */
-$("#roll").onclick = () => send({ cmd: "replay", speed });
-$("#mic").onclick = async () => {
-  const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-  const rec = new MediaRecorder(stream, { mimeType: "audio/webm;codecs=opus" });
-  rec.ondataavailable = (e) => e.data.size && e.data.arrayBuffer().then((b) => ws.send(b));
-  send({ cmd: "live" });
-  rec.start(400);
-};
+$("#roll").onclick = roll;
+$("#reset").onclick = reset;
 $("#speed").onclick = () => {
   speed = speed === 1 ? 2 : speed === 2 ? 4 : 1;
   $("#speed").textContent = `${speed}×`;
-  $("#speed").setAttribute("aria-pressed", speed !== 1);
+  $("#speed").setAttribute("aria-pressed", String(speed !== 1));
 };
-$("#reset").onclick = () => send({ cmd: "reset" });
 
-fetch("/api/session").then((r) => r.json()).then((s) => {
-  $("#workflow").textContent = s.workflow;
-  $("#mode").textContent = s.live ? "corti live" : "recorded";
-  if (!s.live) $("#mic").remove();
-  note(`${s.codes} codes · ${s.requirements} documentation requirements · ${s.live ? "live Corti API" : "recorded Corti output"}`);
-});
+/** Live microphone. Needs the proxy, which holds the Corti credentials. */
+$("#mic").onclick = async () => {
+  await reset();
+  started = Date.now();
+  $("#onair").dataset.on = "1";
+  const ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/api/stream`);
+  ws.onmessage = ({ data }) => {
+    const m = JSON.parse(data);
+    if (m.type !== "transcript") return;
+    for (const seg of m.data || []) {
+      if (seg.final) addTurn(seg.speakerId === 0 ? "clinician" : "patient", seg.transcript, seg.time?.start);
+    }
+  };
+  ws.onerror = () => note("Live stream failed. Check the server log.");
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  ws.onopen = () => {
+    mic = new MediaRecorder(stream, { mimeType: "audio/webm;codecs=opus" });
+    mic.ondataavailable = (e) => e.data.size && ws.readyState === 1 && e.data.arrayBuffer().then((b) => ws.send(b));
+    mic.start(400);
+  };
+};
 
-draw();
+/* ── start ──────────────────────────────────────────────────────────── */
+(async () => {
+  const [consultation, fixtures, session] = await Promise.all([
+    fetch("./demo/consultation.json").then((r) => r.json()),
+    fetch("./demo/fixtures.json").then((r) => r.json()),
+    fetch("./api/session").then((r) => r.json()).catch(() => null),
+  ]);
+  script = consultation;
+  source = session?.live ? liveSource() : offlineSource(fixtures);
+  engine = new GapEngine(source);
+  $("#workflow").textContent = RULEPACK.workflow;
+  $("#mode").textContent = session?.live ? "corti live" : "recorded";
+  if (!session?.live) $("#mic").remove();
+  note(`${RULEPACK.codes.length} codes · ${Object.keys(RULEPACK.requirements).length} documentation requirements · ${session?.live ? "live Corti API" : "recorded Corti output"}`);
+  draw();
+})();

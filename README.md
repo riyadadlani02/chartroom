@@ -2,6 +2,8 @@
 
 **A coding desk that sits in the room, not three weeks downstream.**
 
+### ▶ [Open the console](https://riyadadlani02.github.io/chartroom/)
+
 Claim denials from thin documentation get caught by a coder weeks after the
 visit, when nobody remembers what happened. By then the only options are an
 appeal, a downgrade, or writing it off. CHARTROOM moves that check to the one
@@ -41,13 +43,9 @@ Five gap types, because not every miss is the same miss:
 
 ## The 90-second demo
 
-```bash
-uv sync
-uv run uvicorn server.main:app --port 8000
-```
-
-Open <http://localhost:8000>, click through the tune-in, press **Roll
-consultation**. It replays a real-shaped diabetes review at 2×.
+[Open the console](https://riyadadlani02.github.io/chartroom/), click through the
+tune-in, press **Roll consultation**. It replays a real-shaped diabetes review
+at 2×.
 
 1. **0:16** — `99214` opens **at risk**. Two of three MDM elements are missing.
    Watch it earn its way green as the clinician states the problem status and
@@ -78,43 +76,54 @@ exact words that defend it.
 | **Corti Models** | The requirement judge. One batched call per tick asks, per requirement, *is this documented* and *quote the span*. Narrow question, verbatim answer |
 
 Model offsets are never trusted — the judge returns a quote, and CHARTROOM
-anchors it against the transcript itself (`server/gaps.py`). A quote that cannot
-be found is discarded rather than displayed.
+anchors it against the transcript itself. A quote that cannot be found in the
+transcript is discarded rather than displayed.
 
-## Running against the real API
+## Running it
 
-Offline is the default: `demo/fixtures.json` holds recorded Corti output and the
-console runs with no credentials, on a plane. Set these and every call goes live:
+**The engine runs in the browser.** `web/` is the entire console — rulepack,
+engine, renderer, demo data — so the demo needs no server, no build step and no
+credentials. Any static host will do:
 
 ```bash
-cp .env.example .env   # then fill in, and: set -a; source .env; set +a
+cd web && python3 -m http.server 8000
 ```
 
-`CORTI_CLIENT_ID` / `CORTI_CLIENT_SECRET` / `CORTI_TENANT` switch on the real
-coding, facts and document endpoints. A **Use microphone** button appears in the
-rail, which creates an interaction and streams live audio to Corti over
-WebSocket. `CHARTROOM_LLM_BASE` points the judge at any OpenAI-compatible
-endpoint; it defaults to Corti Models. With no judge configured, requirements
-fall back to the cue lists in the rulepack — good enough to demo, not good enough
-to ship.
+**The server exists for one reason:** a Corti client secret cannot live in a
+browser. Start it and the same engine calls the real API through a four-route
+proxy, and a **Use microphone** button appears in the rail that streams live
+audio to Corti over WebSocket.
+
+```bash
+cp .env.example .env          # fill in, then: set -a; source .env; set +a
+uv run uvicorn server.main:app --port 8000
+```
+
+`CORTI_CLIENT_ID` / `CORTI_CLIENT_SECRET` / `CORTI_TENANT` switch on real coding,
+facts and streaming. `CHARTROOM_LLM_BASE` points the judge at any
+OpenAI-compatible endpoint; it defaults to Corti Models, whose path is not in
+Corti's public docs index and so is a default rather than a certainty. With no
+judge reachable, requirements fall back to the cue lists in the rulepack — good
+enough to demo, not good enough to ship.
 
 ## The rulepack
 
 One narrow workflow, done end to end: **adult type 2 diabetes follow-up, primary
 care, established patient**. 5 codes, 13 documentation requirements, in
-`server/rulepack.yaml`. Adding a code is adding YAML:
+[`web/rulepack.js`](web/rulepack.js). Adding a code is adding an entry:
 
-```yaml
-- code: "E11.22"
-  system: icd10cm-outpatient
-  display: "Type 2 diabetes mellitus with diabetic chronic kidney disease"
-  gap_type: STAGING
-  watch: true              # hunt for it even when Corti has not predicted it
-  trigger: ckd_present     # ...once this requirement is met
-  value_usd: 690
-  basis: "Stage 3b+ CKD risk-adjusts (≈0.069 RAF); unstaged CKD does not."
-  requires:
-    all_of: [ckd_present, ckd_linked, ckd_staged]
+```js
+{
+  "code": "E11.22",
+  "system": "icd10cm-outpatient",
+  "display": "Type 2 diabetes mellitus with diabetic chronic kidney disease",
+  "gap_type": "STAGING",
+  "watch": true,             // hunt for it even when Corti has not predicted it
+  "trigger": "ckd_present",  // ...once this requirement is met
+  "value_usd": 690,
+  "basis": "Stage 3b+ CKD risk-adjusts (≈0.069 RAF); unstaged CKD does not.",
+  "requires": { "all_of": ["ckd_present", "ckd_linked", "ckd_staged"] }
+}
 ```
 
 `requires` supports `all_of`, `any_of` and `n_of` — the last one because real E/M
@@ -130,14 +139,25 @@ your own fee schedule.
 ## Tests
 
 ```bash
-uv run pytest -q
+node --test
 ```
 
 The demo, asserted: the suite replays the whole consultation through the engine
 and checks that the linkage gap opens on the right turn and closes on the right
 turn, that the money lands on `$706` at risk and `$2,007` captured, and that
 every evidence span still points at the exact characters it claims to. If the
-90-second story stops working, the tests fail.
+90-second story stops working, the tests fail and Pages does not deploy.
+
+## Layout
+
+```
+web/            the console — this folder alone is the deployed site
+  rulepack.js     codes, requirements, dollars, and the arithmetic behind them
+  engine.js       the gap engine; runs in the browser in both modes
+  app.js          three-tube renderer and the replay loop
+  demo/           the scripted consultation and recorded Corti output
+server/         the credentialed proxy for the live path — optional
+```
 
 ## What this is not
 
