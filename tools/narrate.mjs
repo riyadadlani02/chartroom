@@ -1,18 +1,29 @@
 /* Lays a spoken track over the recording tools/record.mjs produced.
  *
- * Each line is pinned to a cue emitted during capture, so the words land on
- * the frame they describe without anybody nudging a timeline. macOS `say` does
- * the speech; ffmpeg delays each clip to its cue and mixes.
+ * Each line is pinned to a cue emitted during capture, so the words land on the
+ * frame they describe without anybody nudging a timeline.
+ *
+ * Speech comes from ElevenLabs when ELEVEN_API_KEY is set, and from macOS `say`
+ * otherwise, so the pipeline still runs with no account. A human voice will not
+ * hit the same durations as a synthetic one, so any line that overruns its cue
+ * window is tempo-fitted with ffmpeg rather than rewritten — atempo preserves
+ * pitch, and anything past ~1.15 gets flagged as needing a shorter line.
  *
  *   node tools/narrate.mjs out/            -> out/chartroom-demo.mp4
  */
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 const OUT = process.argv[2] || "out";
-const VOICE = process.env.VOICE || "Daniel";
-const RATE = process.env.RATE || "150";
+
+const EL_KEY = process.env.ELEVEN_API_KEY || "";
+const EL_BASE = (process.env.ELEVENLABS_BASE_URL || "https://api.elevenlabs.io/v1").replace(/\/$/, "");
+const EL_VOICE = process.env.ELEVEN_VOICE_ID || "JBFqnCBsd6RMkjVDRZzb";  // George — warm, British, narration
+const EL_MODEL = process.env.ELEVEN_MODEL || "eleven_multilingual_v2";
+const SAY_VOICE = process.env.VOICE || "Daniel";
+const SAY_RATE = process.env.RATE || "150";
+const MAX_TEMPO = 1.15;      // past this it stops sounding like a person talking
 
 const SCRIPT = [
   ["intro", "This is CHARTROOM. It watches a consultation, and asks one question about the codes."],
@@ -30,23 +41,54 @@ const SCRIPT = [
   ["outro", "Caught in the room, it is free. Caught by a coder three weeks later, it is a denial."],
 ];
 
-const cues = JSON.parse(readFileSync(join(OUT, "cues.json")));
 const dur = (f) =>
   Number(execFileSync("ffprobe", ["-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", f]).toString().trim());
 
+async function speak(line, file) {
+  if (!EL_KEY) {
+    execFileSync("say", ["-v", SAY_VOICE, "-r", SAY_RATE, "-o", file, line]);
+    return;
+  }
+  const r = await fetch(`${EL_BASE}/text-to-speech/${EL_VOICE}?output_format=mp3_44100_128`, {
+    method: "POST",
+    headers: { "xi-api-key": EL_KEY, "content-type": "application/json" },
+    body: JSON.stringify({
+      text: line,
+      model_id: EL_MODEL,
+      voice_settings: { stability: 0.45, similarity_boost: 0.8, style: 0.05, use_speaker_boost: true },
+    }),
+  });
+  if (!r.ok) throw new Error(`ElevenLabs ${r.status}: ${(await r.text()).slice(0, 300)}`);
+  writeFileSync(file, Buffer.from(await r.arrayBuffer()));
+}
+
+/** Squeeze a clip into its window without changing its pitch. */
+function fit(file, spoken, window) {
+  if (window === Infinity || spoken <= window) return { spoken, tempo: 1 };
+  const tempo = Math.min((spoken / window) * 1.02, MAX_TEMPO);
+  const tmp = file.replace(/(\.\w+)$/, ".fit$1");
+  execFileSync("ffmpeg", ["-y", "-v", "error", "-i", file, "-filter:a", `atempo=${tempo.toFixed(4)}`, tmp]);
+  renameSync(tmp, file);
+  return { spoken: dur(file), tempo };
+}
+
+const cues = JSON.parse(readFileSync(join(OUT, "cues.json")));
+const ext = EL_KEY ? "mp3" : "aiff";
 const clips = [];
-SCRIPT.forEach(([cue, line], i) => {
+
+for (const [i, [cue, line]] of SCRIPT.entries()) {
   if (!(cue in cues)) throw new Error(`no cue "${cue}" in the recording`);
-  const file = join(OUT, `n${i}.aiff`);
-  execFileSync("say", ["-v", VOICE, "-r", RATE, "-o", file, line]);
+  const file = join(OUT, `n${i}.${ext}`);
+  await speak(line, file);
   const next = SCRIPT[i + 1]?.[0];
   const window = (next ? cues[next] : Infinity) - cues[cue];
-  const spoken = dur(file);
-  if (spoken > window) {
-    console.warn(`⚠ "${cue}" runs ${spoken.toFixed(1)}s into a ${window.toFixed(1)}s window — trim the line`);
+  const raw = dur(file);
+  const { spoken, tempo } = fit(file, raw, window);
+  if (spoken > window + 0.05) {
+    console.warn(`⚠ "${cue}" still runs ${spoken.toFixed(1)}s in a ${window.toFixed(1)}s window at max tempo — shorten the line`);
   }
-  clips.push({ file, at: cues[cue], spoken, window });
-});
+  clips.push({ cue, file, at: cues[cue], raw, spoken, window, tempo });
+}
 
 const inputs = clips.flatMap((c) => ["-i", c.file]);
 const delays = clips
@@ -58,14 +100,17 @@ execFileSync("ffmpeg", [
   "-y", "-v", "error",
   "-i", join(OUT, "silent.mp4"),
   ...inputs,
-  "-filter_complex", `${delays};${mix};[mixed]volume=1.6,alimiter=limit=0.95[voice]`,
+  "-filter_complex", `${delays};${mix};[mixed]loudnorm=I=-16:TP=-1.5:LRA=11[voice]`,
   "-map", "0:v", "-map", "[voice]",
-  "-c:v", "copy", "-c:a", "aac", "-b:a", "160k", "-ar", "44100", "-ac", "2",
+  "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", "-ar", "44100", "-ac", "2",
   "-movflags", "+faststart",
   join(OUT, "chartroom-demo.mp4"),
 ], { stdio: "inherit" });
 
-console.log("\n" + clips.map((c, i) =>
-  `${String(SCRIPT[i][0]).padEnd(11)} @${c.at.toFixed(1).padStart(6)}s  ${c.spoken.toFixed(1)}s / ${c.window === Infinity ? "end" : c.window.toFixed(1) + "s"}`
+console.log(`\nvoice: ${EL_KEY ? `ElevenLabs ${EL_VOICE} (${EL_MODEL})` : `say ${SAY_VOICE}`}\n`);
+console.log(clips.map((c) =>
+  `${c.cue.padEnd(11)} @${c.at.toFixed(1).padStart(6)}s  ${c.raw.toFixed(1)}s` +
+  `${c.tempo > 1 ? ` →${c.spoken.toFixed(1)}s @${c.tempo.toFixed(2)}×` : ""}` +
+  ` / ${c.window === Infinity ? "end" : c.window.toFixed(1) + "s"}`
 ).join("\n"));
 console.log(`\n→ ${join(OUT, "chartroom-demo.mp4")}`);

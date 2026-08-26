@@ -176,14 +176,19 @@ The walkthrough is a real recording of the real console, not a mockup, and it
 regenerates from source in two commands. `record.mjs` drives headless Chrome
 over the DevTools protocol — no Puppeteer, no Playwright, just the WebSocket
 client Node already ships — and emits frames plus the wall-clock offset of every
-narration beat. `narrate.mjs` speaks each line with macOS `say`, pins it to its
-cue, and warns if a line runs longer than the moment it describes.
+narration beat. `narrate.mjs` speaks each line, pins it to its cue, and tempo-fits
+any line that outruns the moment it describes.
 
 ```bash
 cd docs && python3 -m http.server 8078 &
 node tools/record.mjs http://127.0.0.1:8078/ out/
 node tools/narrate.mjs out/
 ```
+
+Narration uses ElevenLabs when `ELEVEN_API_KEY` is set, and falls back to macOS
+`say` when it is not, so the pipeline runs with no account. Point it at a
+different voice or a data-residency region with `ELEVEN_VOICE_ID` and
+`ELEVENLABS_BASE_URL`. The final mix is normalised to −16 LUFS.
 
 `docs/` is named for GitHub Pages, which serves it straight off `main` with no
 build step and no CI. What you run locally is byte for byte what is deployed.
