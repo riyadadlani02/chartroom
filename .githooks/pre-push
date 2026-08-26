@@ -1,0 +1,3 @@
+#!/bin/sh
+# Pages deploys straight off main with no CI, so this is the only gate.
+exec node --test

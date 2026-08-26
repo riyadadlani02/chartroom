@@ -11,6 +11,7 @@ import contextlib
 import json
 import os
 import re
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
@@ -32,17 +33,21 @@ JUDGE_SYSTEM = (
     "character from the transcript. Output JSON only."
 )
 
-app = FastAPI(title="CHARTROOM")
 corti = Corti()
 
 
-@app.on_event("shutdown")
-async def _shutdown() -> None:
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    yield
     await corti.aclose()
 
 
-@app.get("/api/session")
+app = FastAPI(title="CHARTROOM", lifespan=lifespan)
+
+
+@app.get("/api/session.json")
 async def session() -> dict:
+    """Overrides the static docs/api/session.json a bare host would serve."""
     return {"live": corti.live, "environment": corti.env}
 
 

@@ -36,13 +36,19 @@ setTimeout(() => { const l = $("#bootline"); if (l) l.textContent = "Signal lock
 /* ── sound ──────────────────────────────────────────────────────────── */
 function tone(freq, ms, type, at = 0, gain = 0.05) {
   if (!sound) return;
-  ac = ac || new (window.AudioContext || window.webkitAudioContext)();
-  const o = ac.createOscillator(), g = ac.createGain();
-  o.type = type; o.frequency.value = freq;
-  g.gain.setValueAtTime(gain, ac.currentTime + at);
-  g.gain.exponentialRampToValueAtTime(0.0001, ac.currentTime + at + ms / 1000);
-  o.connect(g).connect(ac.destination);
-  o.start(ac.currentTime + at); o.stop(ac.currentTime + at + ms / 1000);
+  // No audio device, a locked context, a private window: a blip that cannot
+  // play must never take the analysis loop down with it.
+  try {
+    ac = ac || new (window.AudioContext || window.webkitAudioContext)();
+    const o = ac.createOscillator(), g = ac.createGain();
+    o.type = type; o.frequency.value = freq;
+    g.gain.setValueAtTime(gain, ac.currentTime + at);
+    g.gain.exponentialRampToValueAtTime(0.0001, ac.currentTime + at + ms / 1000);
+    o.connect(g).connect(ac.destination);
+    o.start(ac.currentTime + at); o.stop(ac.currentTime + at + ms / 1000);
+  } catch {
+    sound = false;
+  }
 }
 const alarm = () => { tone(233, 110, "square"); tone(175, 150, "square", 0.13); };
 const chime = () => { tone(523, 90, "sine"); tone(784, 200, "sine", 0.09, 0.04); };
@@ -92,7 +98,7 @@ function event(e) {
 
 async function reset() {
   runId++;
-  if (mic) { mic.stop(); mic = null; }
+  if (mic) { if (mic.state !== "inactive") mic.stop(); mic = null; }
   turns = []; log = []; selected = heroId = started = null;
   board = { codes: [], gaps: [], facts: [], atRisk: 0, captured: 0 };
   engine = new GapEngine(source);
@@ -286,7 +292,7 @@ $("#mic").onclick = async () => {
   const [consultation, fixtures, session] = await Promise.all([
     fetch("./demo/consultation.json").then((r) => r.json()),
     fetch("./demo/fixtures.json").then((r) => r.json()),
-    fetch("./api/session").then((r) => r.json()).catch(() => null),
+    fetch("./api/session.json").then((r) => r.json()).catch(() => null),
   ]);
   script = consultation;
   source = session?.live ? liveSource() : offlineSource(fixtures);
@@ -294,6 +300,7 @@ $("#mic").onclick = async () => {
   $("#workflow").textContent = RULEPACK.workflow;
   $("#mode").textContent = session?.live ? "corti live" : "recorded";
   if (!session?.live) $("#mic").remove();
+  for (const b of document.querySelectorAll(".transport button")) b.disabled = false;
   note(`${RULEPACK.codes.length} codes · ${Object.keys(RULEPACK.requirements).length} documentation requirements · ${session?.live ? "live Corti API" : "recorded Corti output"}`);
   draw();
 })();

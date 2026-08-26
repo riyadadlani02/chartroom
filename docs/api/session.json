@@ -1,0 +1,4 @@
+{
+  "_note": "Served as-is by a static host, which is how the console knows there is no proxy and therefore no credentials. The Python proxy registers a route at this same path and answers with the real state.",
+  "live": false
+}

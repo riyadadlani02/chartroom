@@ -2,7 +2,9 @@
 
 **A coding desk that sits in the room, not three weeks downstream.**
 
-### ▶ [Open the console](https://riyadadlani02.github.io/chartroom/)
+### ▶ [Open the console](https://riyadadlani02.github.io/chartroom/) &nbsp;·&nbsp; [Watch the walkthrough](https://riyadadlani02.github.io/chartroom/chartroom-demo.mp4) (1:48, narrated)
+
+[![CHARTROOM](docs/preview.png)](https://riyadadlani02.github.io/chartroom/)
 
 Claim denials from thin documentation get caught by a coder weeks after the
 visit, when nobody remembers what happened. By then the only options are an
@@ -142,6 +144,14 @@ your own fee schedule.
 node --test
 ```
 
+Pages deploys straight off `main` with no CI — Actions is unavailable on this
+account — so the suite is wired to a hook instead. It runs on every push and
+blocks one that fails:
+
+```bash
+git config core.hooksPath .githooks
+```
+
 The demo, asserted: the suite replays the whole consultation through the engine
 and checks that the linkage gap opens on the right turn and closes on the right
 turn, that the money lands on `$706` at risk and `$2,007` captured, and that
@@ -157,6 +167,22 @@ docs/           the console — this folder alone is the deployed site
   app.js          three-tube renderer and the replay loop
   demo/           the scripted consultation and recorded Corti output
 server/         the credentialed proxy for the live path — optional
+tools/          rebuilds the walkthrough video from the live console
+```
+
+### Rebuilding the video
+
+The walkthrough is a real recording of the real console, not a mockup, and it
+regenerates from source in two commands. `record.mjs` drives headless Chrome
+over the DevTools protocol — no Puppeteer, no Playwright, just the WebSocket
+client Node already ships — and emits frames plus the wall-clock offset of every
+narration beat. `narrate.mjs` speaks each line with macOS `say`, pins it to its
+cue, and warns if a line runs longer than the moment it describes.
+
+```bash
+cd docs && python3 -m http.server 8078 &
+node tools/record.mjs http://127.0.0.1:8078/ out/
+node tools/narrate.mjs out/
 ```
 
 `docs/` is named for GitHub Pages, which serves it straight off `main` with no
