@@ -18,7 +18,8 @@ from fastapi.staticfiles import StaticFiles
 
 from .corti import Corti
 
-WEB = Path(__file__).resolve().parent.parent / "web"
+# GitHub Pages serves this folder verbatim, which is why it is called docs/.
+WEB = Path(__file__).resolve().parent.parent / "docs"
 
 JUDGE_SYSTEM = (
     "You are a clinical documentation integrity auditor. You are given a "
@@ -106,7 +107,7 @@ async def stream(sock: WebSocket) -> None:
             await pump
 
 
-# Everything else is the static console — the same files a static host serves.
+# Everything else is the static console — byte for byte what Pages serves.
 app.mount("/", StaticFiles(directory=WEB, html=True), name="web")
 
 

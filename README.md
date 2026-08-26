@@ -81,12 +81,12 @@ transcript is discarded rather than displayed.
 
 ## Running it
 
-**The engine runs in the browser.** `web/` is the entire console — rulepack,
+**The engine runs in the browser.** `docs/` is the entire console — rulepack,
 engine, renderer, demo data — so the demo needs no server, no build step and no
 credentials. Any static host will do:
 
 ```bash
-cd web && python3 -m http.server 8000
+cd docs && python3 -m http.server 8000
 ```
 
 **The server exists for one reason:** a Corti client secret cannot live in a
@@ -110,7 +110,7 @@ enough to demo, not good enough to ship.
 
 One narrow workflow, done end to end: **adult type 2 diabetes follow-up, primary
 care, established patient**. 5 codes, 13 documentation requirements, in
-[`web/rulepack.js`](web/rulepack.js). Adding a code is adding an entry:
+[`docs/rulepack.js`](docs/rulepack.js). Adding a code is adding an entry:
 
 ```js
 {
@@ -146,18 +146,21 @@ The demo, asserted: the suite replays the whole consultation through the engine
 and checks that the linkage gap opens on the right turn and closes on the right
 turn, that the money lands on `$706` at risk and `$2,007` captured, and that
 every evidence span still points at the exact characters it claims to. If the
-90-second story stops working, the tests fail and Pages does not deploy.
+90-second story stops working, the tests fail.
 
 ## Layout
 
 ```
-web/            the console — this folder alone is the deployed site
+docs/           the console — this folder alone is the deployed site
   rulepack.js     codes, requirements, dollars, and the arithmetic behind them
   engine.js       the gap engine; runs in the browser in both modes
   app.js          three-tube renderer and the replay loop
   demo/           the scripted consultation and recorded Corti output
 server/         the credentialed proxy for the live path — optional
 ```
+
+`docs/` is named for GitHub Pages, which serves it straight off `main` with no
+build step and no CI. What you run locally is byte for byte what is deployed.
 
 ## What this is not
 

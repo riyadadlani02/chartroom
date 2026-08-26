@@ -5,8 +5,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-import { GapEngine, evaluate, leaves, offlineSource, V } from "../web/engine.js";
-import { RULEPACK } from "../web/rulepack.js";
+import { GapEngine, evaluate, leaves, offlineSource, V } from "../docs/engine.js";
+import { RULEPACK } from "../docs/rulepack.js";
 
 const read = (p) => JSON.parse(readFileSync(new URL(p, import.meta.url)));
 const SCRIPT = read("../web/demo/consultation.json");
