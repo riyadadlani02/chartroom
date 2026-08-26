@@ -1,0 +1,50 @@
+{
+  "_note": "Recorded Corti /tools/coding/ and /tools/extract-facts output, so the demo runs with no credentials. Each code appears once its afterCue has been spoken; evidence offsets are re-anchored against the live transcript at replay time. With CORTI_CLIENT_ID set, none of this file is read.",
+  "codes": [
+    {
+      "system": "icd10cm-outpatient", "code": "E11.9",
+      "display": "Type 2 diabetes mellitus without complications",
+      "afterCue": "not at goal",
+      "evidences": [{ "text": "your control has drifted and we're not at goal anymore" }],
+      "alternatives": [{ "code": "E11.65", "display": "Type 2 diabetes mellitus with hyperglycemia" }]
+    },
+    {
+      "system": "cpt", "code": "99214",
+      "display": "Office or other outpatient visit, established patient, moderate level of medical decision making",
+      "afterCue": "a1c back",
+      "evidences": [{ "text": "I've got today's A1c back" }],
+      "alternatives": [{ "code": "99213", "display": "Office or other outpatient visit, established patient, low level of medical decision making" }]
+    },
+    {
+      "system": "icd10cm-outpatient", "code": "Z79.4",
+      "display": "Long term (current) use of insulin",
+      "afterCue": "long acting insulin",
+      "evidences": [{ "text": "the long acting insulin at night" }]
+    },
+    {
+      "system": "icd10cm-outpatient", "code": "N18.9",
+      "display": "Chronic kidney disease, unspecified",
+      "afterCue": "egfr is forty four",
+      "evidences": [{ "text": "The eGFR is forty four, and there's albumin showing in the urine" }],
+      "alternatives": [{ "code": "N18.32", "display": "Chronic kidney disease, stage 3b" }]
+    },
+    {
+      "system": "icd10cm-outpatient", "code": "F17.210",
+      "display": "Nicotine dependence, cigarettes, uncomplicated",
+      "afterCue": "ten a day",
+      "evidences": [{ "text": "About ten a day" }]
+    }
+  ],
+  "facts": [
+    { "group": "Medical history", "value": "Type 2 diabetes mellitus", "text": "Your control has drifted and we're not at goal anymore" },
+    { "group": "Test results", "value": "HbA1c 8.4% (was 7.1%)", "text": "I've got today's A1c back" },
+    { "group": "Medication", "value": "Metformin, twice daily", "text": "I take it twice a day" },
+    { "group": "Medication", "value": "Long-acting insulin, nightly", "text": "And the long acting insulin at night" },
+    { "group": "Symptoms", "value": "Nocturnal burning paraesthesia, both feet", "text": "My feet have been tingling at night" },
+    { "group": "Examination", "value": "Reduced monofilament sensation, left forefoot", "text": "Monofilament sensation is reduced across the left forefoot" },
+    { "group": "Test results", "value": "eGFR 44, albuminuria", "text": "The eGFR is forty four" },
+    { "group": "Plan", "value": "Metformin increased to 1g BD; SGLT2 inhibitor started", "text": "I'm going to increase the metformin to one gram twice daily" },
+    { "group": "Social history", "value": "Current smoker, 10/day", "text": "About ten a day" },
+    { "group": "Plan", "value": "Nicotine replacement offered; cessation service referral", "text": "I'd like you to try nicotine replacement" }
+  ]
+}

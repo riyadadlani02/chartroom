@@ -1,0 +1,33 @@
+{
+  "title": "T2DM four-month review",
+  "patient": { "identifier": "DEMO-4471", "name": "Marguerite Okonjo", "gender": "female", "birthDate": "1965-03-02T00:00:00Z" },
+  "encounter": { "identifier": "DEMO-ENC-9", "status": "in-progress", "type": "consultation", "title": "Diabetes review" },
+  "turns": [
+    { "t": 0.0,  "speaker": "clinician", "text": "Come on in, Marguerite. Good to see you. It's been about four months since we last went through everything." },
+    { "t": 5.0,  "speaker": "patient",   "text": "Four months, yes. Feels like less." },
+    { "t": 8.0,  "speaker": "clinician", "text": "How have things been going with the sugars?" },
+    { "t": 11.0, "speaker": "patient",   "text": "Not great, honestly. The morning numbers have been higher than they used to be." },
+    { "t": 16.0, "speaker": "clinician", "text": "That matches what I'm seeing. Your control has drifted and we're not at goal anymore." },
+    { "t": 21.0, "speaker": "patient",   "text": "Is that bad?" },
+    { "t": 23.0, "speaker": "clinician", "text": "It means we do something about it rather than leave it another four months." },
+    { "t": 28.0, "speaker": "clinician", "text": "I've got today's A1c back — it's eight point four, up from seven point one — and I've read through the letter from the eye clinic in January." },
+    { "t": 36.0, "speaker": "clinician", "text": "How are you getting on with the metformin?" },
+    { "t": 39.0, "speaker": "patient",   "text": "I take it twice a day. And the long acting insulin at night, same as before." },
+    { "t": 45.0, "speaker": "patient",   "text": "There is one thing. My feet have been tingling at night. A burning sort of feeling, it keeps me awake." },
+    { "t": 53.0, "speaker": "clinician", "text": "How long has that been going on?" },
+    { "t": 55.0, "speaker": "patient",   "text": "A few months. It's worse once I'm in bed." },
+    { "t": 59.0, "speaker": "clinician", "text": "Let me have a look at your feet. Pedal pulses are present on both sides. Monofilament sensation is reduced across the left forefoot." },
+    { "t": 69.0, "speaker": "clinician", "text": "So what you're describing, together with the reduced sensation I've just found, is diabetic peripheral neuropathy. It's the diabetes affecting the nerves in the feet." },
+    { "t": 79.0, "speaker": "patient",   "text": "I didn't know it could do that." },
+    { "t": 82.0, "speaker": "clinician", "text": "Your kidney numbers have moved as well. The eGFR is forty four, and there's albumin showing in the urine." },
+    { "t": 90.0, "speaker": "patient",   "text": "What does that mean for me?" },
+    { "t": 93.0, "speaker": "clinician", "text": "It means the kidneys are filtering less well than they were. We'll keep a close eye on it and there's plenty we can do." },
+    { "t": 100.0, "speaker": "clinician", "text": "I'm going to increase the metformin to one gram twice daily, and I want to start you on an SGLT2 inhibitor, which helps the sugars and protects the kidneys at the same time." },
+    { "t": 112.0, "speaker": "patient",  "text": "Alright. Whatever you think is best." },
+    { "t": 115.0, "speaker": "clinician", "text": "One more thing before you go. Are you still smoking?" },
+    { "t": 119.0, "speaker": "patient",  "text": "About ten a day. I keep meaning to stop." },
+    { "t": 123.0, "speaker": "clinician", "text": "Let's actually do something about it today. I'd like you to try nicotine replacement, the patches, and I'll refer you through to the stop smoking service this afternoon." },
+    { "t": 133.0, "speaker": "patient",  "text": "I'll give it a go." },
+    { "t": 136.0, "speaker": "clinician", "text": "Good. Repeat bloods in three months and I'll see you back then." }
+  ]
+}
