@@ -9,8 +9,8 @@ import { GapEngine, evaluate, leaves, offlineSource, V } from "../docs/engine.js
 import { RULEPACK } from "../docs/rulepack.js";
 
 const read = (p) => JSON.parse(readFileSync(new URL(p, import.meta.url)));
-const SCRIPT = read("../web/demo/consultation.json");
-const FIXTURES = read("../web/demo/fixtures.json");
+const SCRIPT = read("../docs/demo/consultation.json");
+const FIXTURES = read("../docs/demo/fixtures.json");
 
 /** Feed turns in cumulatively, capturing the board after each one. */
 async function replay() {
