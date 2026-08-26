@@ -236,6 +236,9 @@ function tween(el, to) {
     if (k < 1) requestAnimationFrame(step);
   };
   requestAnimationFrame(step);
+  // rAF is throttled in a background tab, so the counter can sit mid-animation
+  // on a number that was never true. Guarantee the destination lands.
+  setTimeout(() => { if (Number(el.dataset.v) === to) el.textContent = money(to); }, 550);
 }
 
 /* ── ticker ─────────────────────────────────────────────────────────── */
